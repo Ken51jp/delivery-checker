@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>物流配送判定システム（完全版）</title>
+    <title>物流配送判定システム（文字化け対策済）</title>
     <style>
         body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
@@ -15,7 +15,7 @@
         .type1 { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
         .type2 { background-color: #e3f2fd; color: #007bff; border: 1px solid #007bff; }
         .type3 { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
-        #debug-info { font-size: 11px; color: #666; margin-top: 20px; background: #eee; padding: 10px; border-radius: 5px; text-align: left; overflow-x: auto; }
+        #debug-info { font-size: 11px; color: #666; margin-top: 20px; background: #eee; padding: 10px; border-radius: 5px; text-align: left; }
     </style>
 </head>
 <body>
@@ -28,11 +28,11 @@
 
     <div id="app-screen" class="card">
         <h2>🚚 配送判定</h2>
-        <input type="text" id="addressInput" placeholder="例：札幌市中央区、鹿児島市">
+        <input type="text" id="addressInput" placeholder="例：札幌市、鹿児島市、新宿区">
         <button onclick="check()" style="background-color: #28a745;">判定する</button>
         <div id="result"></div>
-        <div id="debug-info">データを準備中...</div>
-        <button onclick="location.reload()" style="margin-top: 40px; background-color: #6c757d; font-size: 11px; padding: 5px; width: auto; color: white; border: none; border-radius: 4px;">ログアウト</button>
+        <div id="debug-info">準備中...</div>
+        <button onclick="location.reload()" style="margin-top: 40px; background-color: #6c757d; font-size: 11px; padding: 5px; color: white; border: none; border-radius: 4px;">ログアウト</button>
     </div>
 
     <script>
@@ -51,15 +51,17 @@
             const debug = document.getElementById('debug-info');
             try {
                 const response = await fetch('data.csv');
-                const text = await response.text();
+                const arrayBuffer = await response.arrayBuffer();
                 
-                // 【対策1】BOM（目に見えないゴミ）を除去
+                // 【対策】Shift-JIS(Excel形式)としてデコードする
+                const decoder = new TextDecoder('shift-jis');
+                const text = decoder.decode(arrayBuffer);
+                
                 const cleanText = text.replace(/^\uFEFF/, "");
                 const lines = cleanText.split(/\r?\n/);
                 
                 deliveryData = lines.filter(line => line.trim() !== "").map(line => {
                     const cols = line.split(',').map(c => c.trim());
-                    // 【対策2】数字がどの列にあっても「最後の列」を区分として取得
                     const typeValue = cols.slice(-1)[0]; 
                     return {
                         pref: cols[0] || "",
@@ -69,7 +71,7 @@
                         type: typeValue
                     };
                 });
-                debug.innerHTML = `読込成功: ${deliveryData.length}件<br>1行目の例: ${deliveryData[0].full} → ${deliveryData[0].type}`;
+                debug.innerHTML = `読込成功: ${deliveryData.length}件<br>1行目の正常表示例: ${deliveryData[0].full} → ${deliveryData[0].type}`;
             } catch (e) {
                 debug.innerText = `エラー: ${e.message}`;
             }
@@ -78,21 +80,16 @@
         function check() {
             const input = document.getElementById('addressInput').value.trim();
             const resultDiv = document.getElementById('result');
-            const debug = document.getElementById('debug-info');
             if (!input) return;
 
-            // 【対策3】検索条件を大幅に緩和（住所のどこかが一致すればOK）
             const found = deliveryData.find(item => {
                 if (!item.full) return false;
-                // CSVの住所が入力に含まれている、または入力がCSVの住所を含んでいる
                 return input.includes(item.full) || item.full.includes(input);
             });
 
             if (!found) {
                 resultDiv.innerHTML = "該当データなし";
                 resultDiv.className = "";
-                // ヒントを表示
-                debug.innerHTML += `<br>検索失敗: 「${input}」に合うデータがありませんでした。`;
                 return;
             }
 
@@ -109,11 +106,11 @@
                 message = "⏳ 翌々日の到着予定です";
                 className = "type3";
             } else {
-                message = `配送区分不明 (CSVの値: ${found.type})`;
+                message = `区分不明 (${found.type})`;
                 className = "";
             }
 
-            resultDiv.innerHTML = message + `<br><small style="font-weight:normal;">(判定データ: ${found.full})</small>`;
+            resultDiv.innerHTML = message + `<br><small style="font-weight:normal;">(判定エリア: ${found.full})</small>`;
             resultDiv.className = className;
         }
     </script>

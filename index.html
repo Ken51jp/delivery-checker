@@ -3,48 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>【開発中】物流配送判定システム</title>
+    <title>物流配送判定システム</title>
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; color: #333; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
-        
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; }
-        input:focus { border-color: #007bff; }
-        
-        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background-color: #0056b3; }
-        
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; -webkit-appearance: none; }
+        input:focus { border-color: #28a745; border-width: 2px; }
+        button { width: 100%; padding: 12px; background-color: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
         #result { margin-top: 25px; min-height: 60px; text-align: left; }
-        
-        /* 候補リストのスタイル */
-        .candidate-item { background: #fff; border: 1px solid #ddd; padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; }
-        .candidate-item:hover { background: #f8f9fa; border-color: #007bff; }
+        .candidate-item { background: #fff; border: 1px solid #ddd; padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; }
         .candidate-name { font-weight: bold; display: block; margin-bottom: 5px; }
-
-        /* 判定結果のラベル */
         .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
-        .bg-type1 { background-color: #28a745; } /* 翌日午前 */
-        .bg-type2 { background-color: #007bff; } /* 翌日午後 */
-        .bg-type3 { background-color: #dc3545; } /* 翌々日 */
-        
+        .bg-type1 { background-color: #28a745; }
+        .bg-type2 { background-color: #007bff; }
+        .bg-type3 { background-color: #dc3545; }
         .result-detail { padding: 15px; border-radius: 10px; text-align: center; font-weight: bold; margin-bottom: 10px; }
         .type1-box { background-color: #e6ffed; border: 1px solid #28a745; color: #28a745; }
         .type2-box { background-color: #e3f2fd; border: 1px solid #007bff; color: #007bff; }
         .type3-box { background-color: #fff5f5; border: 1px solid #dc3545; color: #dc3545; }
-
         #debug-info { font-size: 11px; color: #666; margin-top: 20px; background: #eee; padding: 10px; border-radius: 5px; text-align: left; }
-        .dev-badge { background: #ffc107; color: #000; font-size: 10px; padding: 2px 8px; border-radius: 10px; margin-bottom: 10px; display: inline-block; }
     </style>
 </head>
 <body>
 
     <div id="app-screen" class="card">
-        <span class="dev-badge">開発モード：複数候補表示対応</span>
         <h2>🚚 配送判定</h2>
         <p>地名を入力してください</p>
-        <input type="text" id="addressInput" placeholder="例：栄、清田、札幌" onkeydown="if(event.key==='Enter') check()">
-        <button onclick="check()" style="background-color: #28a745;">検索する</button>
-        
+        <form id="searchForm" action="javascript:void(0);" onsubmit="check();">
+            <input type="search" id="addressInput" placeholder="例：清田、栄、沖縄" enterkeyhint="search" autocomplete="off">
+            <button type="submit">検索する</button>
+        </form>
         <div id="result"></div>
         <div id="debug-info">データを読み込み中...</div>
     </div>
@@ -52,9 +40,7 @@
     <script>
         let deliveryData = [];
 
-        window.onload = function() {
-            loadCSV();
-        };
+        window.onload = function() { loadCSV(); };
 
         async function loadCSV() {
             const debug = document.getElementById('debug-info');
@@ -67,28 +53,40 @@
                 
                 deliveryData = lines.filter(line => line.trim() !== "").map(line => {
                     const cols = line.split(',').map(c => c.trim());
+                    let typeValue = "";
+                    for (let i = cols.length - 1; i >= 0; i--) {
+                        if (cols[i] === "1" || cols[i] === "2" || cols[i] === "3") {
+                            typeValue = cols[i];
+                            break;
+                        }
+                    }
                     return {
-                        pref: cols[0] || "",
-                        city: cols[1] || "",
-                        ward: cols[2] || "",
+                        pref: cols[0] || "", city: cols[1] || "", ward: cols[2] || "",
                         full: (cols[0] + cols[1] + cols[2]).replace(/undefined/g, ""),
-                        type: cols.slice(-1)[0]
+                        type: typeValue
                     };
                 });
                 debug.innerHTML = `読込成功: ${deliveryData.length}件`;
-            } catch (e) {
-                debug.innerText = `エラー: ${e.message}`;
-            }
+            } catch (e) { debug.innerText = `エラー: ${e.message}`; }
         }
 
         function check() {
-            const input = document.getElementById('addressInput').value.trim();
+            const inputElement = document.getElementById('addressInput');
             const resultDiv = document.getElementById('result');
+            const input = inputElement.value.trim();
+
+            // --- 【スマホキーボード強制閉じ強化策】 ---
+            inputElement.blur(); // フォーカスを外す
+            // 1. inputを一瞬だけ操作不能にする
+            inputElement.disabled = true;
+            setTimeout(() => { inputElement.disabled = false; }, 100);
+            // 2. 画面の別の要素（body）をフォーカスしてキーボードを追い出す
+            document.body.focus();
+            // ---------------------------------------
+
             if (!input || deliveryData.length === 0) return;
 
             const keywords = input.split(/[\s　]+/).filter(k => k !== "");
-
-            // 【変更点】findではなくfilterを使い、一致するものをすべて取得
             const matches = deliveryData.filter(item => {
                 if (!item.full) return false;
                 return keywords.every(keyword => item.full.includes(keyword));
@@ -99,28 +97,24 @@
                 return;
             }
 
-            // 1件だけなら即座に結果表示、複数ならリスト表示
             if (matches.length === 1) {
                 showDetail(matches[0]);
             } else {
-                let html = `<p style="font-size:13px; color:#666;">${matches.length}件見つかりました。選択してください：</p>`;
-                matches.forEach((item, index) => {
-                    const typeLabel = getTypeInfo(item.type).label;
+                let html = `<p style="font-size:13px; color:#666;">${matches.length}件見つかりました：</p>`;
+                matches.forEach((item) => {
+                    const info = getTypeInfo(item.type);
                     const badgeClass = "bg-type" + item.type;
                     html += `
                         <div class="candidate-item" onclick='showSelected(${JSON.stringify(item)})'>
                             <span class="candidate-name">${item.full}</span>
-                            <span class="badge ${badgeClass}">${typeLabel}</span>
+                            <span class="badge ${badgeClass}">${info.label}</span>
                         </div>`;
                 });
                 resultDiv.innerHTML = html;
             }
         }
 
-        // リストから選ばれた時の処理
-        window.showSelected = function(item) {
-            showDetail(item);
-        };
+        window.showSelected = function(item) { showDetail(item); };
 
         function showDetail(item) {
             const resultDiv = document.getElementById('result');
@@ -132,6 +126,8 @@
                 </div>
                 <button onclick="resetSearch()" style="background-color:#6c757d; font-size:12px; padding:5px; margin-top:10px;">再検索</button>
             `;
+            // 詳細表示時にも念のためキーボードを追い出す
+            document.activeElement.blur();
         }
 
         function getTypeInfo(type) {
@@ -139,7 +135,7 @@
                 case "1": return { label: "翌日午前", message: "✨ 明日の午前中", boxClass: "type1-box" };
                 case "2": return { label: "翌日午後", message: "🚚 明日の午後以降", boxClass: "type2-box" };
                 case "3": return { label: "翌々日", message: "⏳ 翌々日の到着予定", boxClass: "type3-box" };
-                default: return { label: "不明", message: "区分不明", boxClass: "" };
+                default: return { label: "不明", message: "区分不明 (" + type + ")", boxClass: "" };
             }
         }
 

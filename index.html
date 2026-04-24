@@ -3,29 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>配送判定・詳細版</title>
+    <title>配送判定システム（認証あり）</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f7f6; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background-color: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
+        
+        /* 認証前の画面 */
+        #login-screen { display: block; }
+        /* 認証後のアプリ本体（最初は隠しておく） */
+        #app-screen { display: none; }
+
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        
         #result { margin-top: 20px; padding: 15px; border-radius: 6px; font-weight: bold; line-height: 1.5; }
-        .alert { color: #856404; background-color: #fff3cd; border: 1px solid #ffeeba; }
         .ok { color: #155724; background-color: #d4edda; border: 1px solid #c3e6cb; }
         .delay { color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; }
+        .error { color: #dc3545; font-size: 0.9em; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>🚚 配送判定（市町村詳細版）</h2>
+
+    <div id="login-screen" class="card">
+        <h2>🔒 認証</h2>
+        <p>パスワードを入力してください</p>
+        <input type="password" id="passInput" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter') login()">
+        <button onclick="login()">ログイン</button>
+        <p id="loginError" class="error"></p>
+    </div>
+
+    <div id="app-screen" class="card">
+        <h2>🚚 配送判定（東京発）</h2>
         <p>お届け先を入力してください</p>
-        <input type="text" id="addressInput" placeholder="例：青森県十和田市、福岡市、小笠原村" onkeydown="if(event.key==='Enter') check()">
-        <button onclick="check()">判定する</button>
+        <input type="text" id="addressInput" placeholder="例：大阪府、青森、小笠原村" onkeydown="if(event.key==='Enter') check()">
+        <button onclick="check()" style="background-color: #28a745;">判定する</button>
         <div id="result"></div>
+        <button onclick="location.reload()" style="margin-top: 30px; background-color: #6c757d; font-size: 12px; padding: 5px;">ログアウト</button>
     </div>
 
     <script>
-        // 基本の県別日数
+        // パスワード設定
+        const SECRET_PASS = "5963";
+
+        // ログイン処理
+        function login() {
+            const pass = document.getElementById('passInput').value;
+            const error = document.getElementById('loginError');
+            
+            if (pass === SECRET_PASS) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-screen').style.display = 'block';
+            } else {
+                error.innerText = "パスワードが違います。";
+            }
+        }
+
+        // 配送判定用データ
         const prefMaster = {
             "東京都":1, "神奈川県":1, "千葉県":1, "埼玉県":1, "茨城県":1, "栃木県":1, "群馬県":1,
             "山梨県":1, "長野県":1, "新潟県":1, "富山県":1, "石川県":1, "福井県":1, "静岡県":1, "愛知県":1, "三重県":1, "岐阜県":1,
@@ -35,7 +69,6 @@
             "沖縄県":3
         };
 
-        // 【ここがポイント！】市町村単位の例外ルール
         const specialCities = [
             { name: "小笠原", days: 6, note: "定期船の便によります" },
             { name: "伊豆諸島", days: 3, note: "船の運航状況によります" },
@@ -52,7 +85,6 @@
             let finalDays = 0;
             let note = "";
 
-            // 1. まず例外市町村リストに当てはまるかチェック
             for (let city of specialCities) {
                 if (input.includes(city.name)) {
                     finalDays = city.days;
@@ -61,7 +93,6 @@
                 }
             }
 
-            // 2. 例外になければ、都道府県でチェック
             if (finalDays === 0) {
                 for (let pref in prefMaster) {
                     if (input.includes(pref.replace("県","").replace("府","").replace("都","").replace("道",""))) {
@@ -72,12 +103,11 @@
             }
 
             if (finalDays === 0) {
-                resultDiv.innerHTML = "判定できませんでした。都道府県名を含めて入力してください。";
-                resultDiv.className = "alert";
+                resultDiv.innerHTML = "判定できませんでした。";
+                resultDiv.className = "";
                 return;
             }
 
-            // 15時締め切り判定
             const now = new Date();
             const hour = now.getHours();
             if (hour >= 15) finalDays += 1;

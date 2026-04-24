@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>東京発・明日届くかなチェック</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f7f6; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        select, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 16px; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; }
+        #result { margin-top: 20px; font-weight: bold; font-size: 1.2em; min-height: 50px; }
+        .fast { color: #28a745; } /* 明日届く */
+        .slow { color: #dc3545; } /* 明後日以降 */
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>🚚 配送判定（東京発）</h2>
+        <p>お届け先の都道府県を選んでください</p>
+        <select id="pref">
+            <option value="">-- 都道府県を選択 --</option>
+            <optgroup label="翌日届く可能性が高い">
+                <option value="1">茨城県, 栃木県, 群馬県, 埼玉県, 千葉県, 東京都, 神奈川県</option>
+                <option value="1">山梨県, 長野県, 新潟県, 富山県, 石川県, 福井県, 静岡県, 愛知県, 三重県, 岐阜県</option>
+                <option value="1">大阪府, 京都府, 滋賀県, 奈良県, 兵庫県, 和歌山県</option>
+                <option value="1">宮城県, 山形県, 福島県</option>
+            </optgroup>
+            <optgroup label="通常、中1日（翌々日）">
+                <option value="2">青森県, 岩手県, 秋田県</option>
+                <option value="2">鳥取県, 島根県, 岡山県, 広島県, 山口県</option>
+                <option value="2">徳島県, 香川県, 愛媛県, 高知県</option>
+                <option value="2">福岡県, 佐賀県, 長崎県, 熊本県, 大分県, 宮崎県, 鹿児島県</option>
+                <option value="2">北海道</option>
+            </optgroup>
+            <optgroup label="3日以上">
+                <option value="3">沖縄県・離島</option>
+            </optgroup>
+        </select>
+        <button onclick="check()">判定する</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function check() {
+            const days = document.getElementById('pref').value;
+            const resultDiv = document.getElementById('result');
+            const now = new Date();
+            const hour = now.getHours();
+            const limit = 15; // 15時締め切り
+
+            if (!days) {
+                resultDiv.innerHTML = "都道府県を選択してください。";
+                return;
+            }
+
+            let message = "";
+            let className = "";
+
+            if (hour >= limit) {
+                // 15時を過ぎている場合、発送は明日になるので+1日
+                const arrival = parseInt(days) + 1;
+                message = `15時を過ぎたため明日発送です。<br>到着予定：${arrival}日後`;
+                className = "slow";
+            } else {
+                if (days == "1") {
+                    message = "✨ 明日届きます！";
+                    className = "fast";
+                } else {
+                    message = `到着予定：${days}日後（明後日以降）`;
+                    className = "slow";
+                }
+            }
+            resultDiv.innerHTML = `<span class="${className}">${message}</span>`;
+        }
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>物流配送判定システム</title>
+    <title>物流配送判定システム（完全版）</title>
     <style>
         body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
@@ -11,11 +11,11 @@
         #app-screen { display: none; }
         input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
         button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        #result { margin-top: 25px; padding: 15px; border-radius: 8px; font-weight: bold; min-height: 60px; display: flex; align-items: center; justify-content: center; }
+        #result { margin-top: 25px; padding: 15px; border-radius: 8px; font-weight: bold; min-height: 60px; display: flex; align-items: center; justify-content: center; flex-direction: column; }
         .type1 { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
         .type2 { background-color: #e3f2fd; color: #007bff; border: 1px solid #007bff; }
         .type3 { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
-        #debug-info { font-size: 10px; color: #999; margin-top: 20px; }
+        #debug-info { font-size: 11px; color: #666; margin-top: 20px; background: #eee; padding: 10px; border-radius: 5px; text-align: left; overflow-x: auto; }
     </style>
 </head>
 <body>
@@ -28,11 +28,10 @@
 
     <div id="app-screen" class="card">
         <h2>🚚 配送判定</h2>
-        <p>お届け先を入力してください</p>
-        <input type="text" id="addressInput" placeholder="例：北海道札幌市中央区">
+        <input type="text" id="addressInput" placeholder="例：札幌市中央区、鹿児島市">
         <button onclick="check()" style="background-color: #28a745;">判定する</button>
         <div id="result"></div>
-        <div id="debug-info"></div>
+        <div id="debug-info">データを準備中...</div>
         <button onclick="location.reload()" style="margin-top: 40px; background-color: #6c757d; font-size: 11px; padding: 5px; width: auto; color: white; border: none; border-radius: 4px;">ログアウト</button>
     </div>
 
@@ -53,45 +52,47 @@
             try {
                 const response = await fetch('data.csv');
                 const text = await response.text();
-                // 改行コードの揺れを吸収して1行ずつ処理
-                const lines = text.split(/\r?\n/);
+                
+                // 【対策1】BOM（目に見えないゴミ）を除去
+                const cleanText = text.replace(/^\uFEFF/, "");
+                const lines = cleanText.split(/\r?\n/);
                 
                 deliveryData = lines.filter(line => line.trim() !== "").map(line => {
-                    // カンマで区切り、前後の空白を除去
                     const cols = line.split(',').map(c => c.trim());
+                    // 【対策2】数字がどの列にあっても「最後の列」を区分として取得
+                    const typeValue = cols.slice(-1)[0]; 
                     return {
                         pref: cols[0] || "",
                         city: cols[1] || "",
                         ward: cols[2] || "",
-                        type: cols[3] || cols[cols.length - 1] // 4列目、または最後の列
+                        full: (cols[0] + cols[1] + cols[2]).replace(/undefined/g, ""),
+                        type: typeValue
                     };
                 });
-                debug.innerText = `システム稼働中：${deliveryData.length} 件の配送データを読込済`;
+                debug.innerHTML = `読込成功: ${deliveryData.length}件<br>1行目の例: ${deliveryData[0].full} → ${deliveryData[0].type}`;
             } catch (e) {
-                debug.innerText = `読み込みエラー: ${e.message}`;
+                debug.innerText = `エラー: ${e.message}`;
             }
         }
 
         function check() {
             const input = document.getElementById('addressInput').value.trim();
             const resultDiv = document.getElementById('result');
+            const debug = document.getElementById('debug-info');
             if (!input) return;
 
-            // 検索ロジックの改善：
-            // CSV側の住所（県+市+区）を作成し、入力された文字がそれを「含んでいるか」で判定
+            // 【対策3】検索条件を大幅に緩和（住所のどこかが一致すればOK）
             const found = deliveryData.find(item => {
-                // CSV内の情報を結合（例：「北海道札幌市中央区」や「鹿児島県鹿児島市」）
-                const combined = item.pref + item.city + item.ward;
-                if (!combined) return false;
-                
-                // 入力された住所がCSVの組み合わせを含んでいるかチェック
-                // （例：入力「北海道札幌市中央区大通」に対し、CSV「北海道札幌市中央区」がヒット）
-                return input.includes(combined);
+                if (!item.full) return false;
+                // CSVの住所が入力に含まれている、または入力がCSVの住所を含んでいる
+                return input.includes(item.full) || item.full.includes(input);
             });
 
             if (!found) {
-                resultDiv.innerHTML = "該当データなし。都道府県から入力してください。";
+                resultDiv.innerHTML = "該当データなし";
                 resultDiv.className = "";
+                // ヒントを表示
+                debug.innerHTML += `<br>検索失敗: 「${input}」に合うデータがありませんでした。`;
                 return;
             }
 
@@ -108,11 +109,11 @@
                 message = "⏳ 翌々日の到着予定です";
                 className = "type3";
             } else {
-                message = "配送区分不明: " + found.type;
+                message = `配送区分不明 (CSVの値: ${found.type})`;
                 className = "";
             }
 
-            resultDiv.innerHTML = message;
+            resultDiv.innerHTML = message + `<br><small style="font-weight:normal;">(判定データ: ${found.full})</small>`;
             resultDiv.className = className;
         }
     </script>

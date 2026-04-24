@@ -3,94 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>物流配送判定システム</title>
+    <title>物流配送判定システム（安定版）</title>
     <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; color: #333; }
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
         #login-screen { display: block; }
         #app-screen { display: none; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; }
-        input:focus { border-color: #007bff; }
-        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background-color: #0056b3; }
-        #result { margin-top: 25px; padding: 15px; border-radius: 8px; min-height: 60px; line-height: 1.6; font-weight: bold; }
-        /* 1: 翌日午前 */
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        #result { margin-top: 25px; padding: 15px; border-radius: 8px; font-weight: bold; min-height: 60px; display: flex; align-items: center; justify-content: center; }
         .type1 { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
-        /* 2: 翌日午後 */
         .type2 { background-color: #e3f2fd; color: #007bff; border: 1px solid #007bff; }
-        /* 3: 翌々日 */
         .type3 { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
-        .loading { font-size: 0.8em; color: #666; }
+        #debug-info { font-size: 10px; color: #999; margin-top: 20px; text-align: left; }
     </style>
 </head>
 <body>
 
     <div id="login-screen" class="card">
         <h2>🔒 認証</h2>
-        <p>パスワードを入力してください</p>
         <input type="password" id="passInput" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter') login()">
         <button onclick="login()">ログイン</button>
     </div>
 
     <div id="app-screen" class="card">
-        <h2>🚚 配送判定（全国網羅版）</h2>
-        <p>都道府県、市区町村を入力してください</p>
-        <input type="text" id="addressInput" placeholder="例：大阪府大阪市北区" onkeydown="if(event.key==='Enter') check()">
+        <h2>🚚 配送判定</h2>
+        <p>お届け先を入力（例：札幌市中央区）</p>
+        <input type="text" id="addressInput" placeholder="住所を入力してください" onkeydown="if(event.key==='Enter') check()">
         <button onclick="check()" style="background-color: #28a745;">判定する</button>
         <div id="result"></div>
-        <p id="loadStatus" class="loading"></p>
-        <button onclick="location.reload()" style="margin-top: 40px; background-color: #6c757d; font-size: 12px; padding: 8px; width: auto;">ログアウト</button>
+        <div id="debug-info"></div>
+        <button onclick="location.reload()" style="margin-top: 40px; background-color: #6c757d; font-size: 11px; padding: 5px; width: auto; color: white; border: none; border-radius: 4px;">ログアウト</button>
     </div>
 
     <script>
         let deliveryData = [];
 
-        async function login() {
+        function login() {
             const pass = document.getElementById('passInput').value;
-            // パスワード 5963 (エンコード済)
             if (btoa(pass) === "NTk2Mw==") {
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app-screen').style.display = 'block';
-                await loadCSV();
+                loadCSV();
             } else {
                 alert("パスワードが違います。");
             }
         }
 
         async function loadCSV() {
-            const status = document.getElementById('loadStatus');
-            status.innerText = "データを読み込み中...";
+            const debug = document.getElementById('debug-info');
             try {
                 const response = await fetch('data.csv');
+                if (!response.ok) throw new Error("CSVファイルが見つかりません");
+                
                 const text = await response.text();
                 const lines = text.split(/\r?\n/);
-                // CSVを解析（空行を除外）
+                
                 deliveryData = lines.filter(line => line.trim() !== "").map(line => {
-                    const [pref, city, ward, type] = line.split(',');
-                    return { pref, city, ward, type: type?.trim() };
+                    // コンマで区切り、各項目をきれいにする
+                    const cols = line.split(',').map(c => c.trim());
+                    return {
+                        pref: cols[0] || "",
+                        city: cols[1] || "",
+                        ward: cols[2] || "",
+                        type: cols[cols.length - 1] // 最後の列を判定数値とする
+                    };
                 });
-                status.innerText = "データの読み込みが完了しました。";
+                debug.innerText = `システム稼働中：${deliveryData.length} 件の配送データを読込済`;
             } catch (e) {
-                status.innerText = "データの読み込みに失敗しました。data.csvが同じ場所にありますか？";
+                debug.innerText = `エラー：${e.message}。data.csvがGitHubに正しくあるか確認してください。`;
             }
         }
 
         function check() {
             const input = document.getElementById('addressInput').value.trim();
             const resultDiv = document.getElementById('result');
-            
             if (!input) return;
 
-            // 入力された住所が含まれる行を探す（都道府県、市区、町村の順に絞り込み）
+            // 判定ロジック：入力された住所の中に、CSVの「県名+市区」が含まれているか
             const found = deliveryData.find(item => {
-                const hasPref = input.includes(item.pref);
-                const hasCity = !item.city || input.includes(item.city);
-                const hasWard = !item.ward || input.includes(item.ward);
-                return hasPref && hasCity && hasWard;
+                const fullAddressInCSV = (item.pref + item.city + item.ward);
+                // CSVの住所が入力値に含まれているか、逆に入力値がCSVの住所を含んでいるか
+                return input.includes(fullAddressInCSV) || fullAddressInCSV.includes(input);
             });
 
             if (!found || !found.type) {
-                resultDiv.innerHTML = "該当する配送データが見つかりませんでした。<br>都道府県から正確に入力してください。";
+                resultDiv.innerHTML = "該当データなし。都道府県から入力してください。";
                 resultDiv.className = "";
                 return;
             }
@@ -98,23 +96,19 @@
             let message = "";
             let className = "";
 
-            // CSVの数値(1,2,3)に基づいてメッセージを固定
-            switch (found.type) {
-                case "1":
-                    message = "✨ 明日の午前中に届きます";
-                    className = "type1";
-                    break;
-                case "2":
-                    message = "🚚 明日の午後以降に届きます";
-                    className = "type2";
-                    break;
-                case "3":
-                    message = "⏳ 翌々日の到着予定です";
-                    className = "type3";
-                    break;
-                default:
-                    message = "配送区分が不明です。";
-                    className = "";
+            if (found.type === "1") {
+                message = "✨ 明日の午前中に届きます";
+                className = "type1";
+            } else if (found.type === "2") {
+                message = "🚚 明日の午後以降に届きます";
+                className = "type2";
+            } else if (found.type === "3") {
+                message = "⏳ 翌々日の到着予定です";
+                className = "type3";
+            } else {
+                resultDiv.innerHTML = "区分不明(" + found.type + ")";
+                resultDiv.className = "";
+                return;
             }
 
             resultDiv.innerHTML = message;

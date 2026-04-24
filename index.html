@@ -1,43 +1,116 @@
-function check() {
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物流配送判定システム</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; color: #333; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
+        
+        #login-screen { display: block; }
+        #app-screen { display: none; }
+
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; }
+        input:focus { border-color: #007bff; }
+        
+        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background-color: #0056b3; }
+        
+        #result { margin-top: 25px; padding: 15px; border-radius: 8px; min-height: 60px; display: flex; align-items: center; justify-content: center; flex-direction: column; font-weight: bold; }
+        
+        /* 1: 翌日午前 / 2: 翌日午後 / 3: 翌々日 */
+        .type1 { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
+        .type2 { background-color: #e3f2fd; color: #007bff; border: 1px solid #007bff; }
+        .type3 { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
+        
+        #debug-info { font-size: 11px; color: #666; margin-top: 20px; background: #eee; padding: 10px; border-radius: 5px; text-align: left; }
+        .note { font-weight: normal; font-size: 0.85em; margin-top: 5px; color: #555; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="card">
+        <h2>🔒 認証</h2>
+        <p>パスワードを入力してください</p>
+        <input type="password" id="passInput" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter') login()">
+        <button onclick="login()">ログイン</button>
+    </div>
+
+    <div id="app-screen" class="card">
+        <h2>🚚 配送判定</h2>
+        <p>お届け先を入力してください</p>
+        <input type="text" id="addressInput" placeholder="例：北海道 清田" onkeydown="if(event.key==='Enter') check()">
+        <button onclick="check()" style="background-color: #28a745;">判定する</button>
+        
+        <div id="result"></div>
+        
+        <div id="debug-info">データを準備中...</div>
+        
+        <button onclick="location.reload()" style="margin-top: 40px; background-color: #6c757d; font-size: 11px; padding: 8px; width: auto; color: white; border: none; border-radius: 4px;">ログアウト</button>
+    </div>
+
+    <script>
+        let deliveryData = [];
+
+        // ログイン処理
+        function login() {
+            const pass = document.getElementById('passInput').value;
+            // パスワード「5963」のエンコード済文字列
+            if (btoa(pass) === "NTk2Mw==") {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-screen').style.display = 'block';
+                loadCSV();
+            } else {
+                alert("パスワードが違います。");
+            }
+        }
+
+        // CSV読み込み（Shift-JIS対応）
+        async function loadCSV() {
+            const debug = document.getElementById('debug-info');
+            try {
+                const response = await fetch('data.csv');
+                if (!response.ok) throw new Error("data.csvが見つかりません");
+                
+                const arrayBuffer = await response.arrayBuffer();
+                
+                // ExcelのCSV(Shift-JIS)を正しくデコード
+                const decoder = new TextDecoder('shift-jis');
+                const text = decoder.decode(arrayBuffer);
+                
+                const cleanText = text.replace(/^\uFEFF/, "");
+                const lines = cleanText.split(/\r?\n/);
+                
+                deliveryData = lines.filter(line => line.trim() !== "").map(line => {
+                    const cols = line.split(',').map(c => c.trim());
+                    // 最後の列を判定タイプ(1, 2, 3)とする
+                    const typeValue = cols.slice(-1)[0]; 
+                    return {
+                        pref: cols[0] || "",
+                        city: cols[1] || "",
+                        ward: cols[2] || "",
+                        // 検索用に県・市・区を合体させた文字列を作成
+                        full: (cols[0] + cols[1] + cols[2]).replace(/undefined/g, ""),
+                        type: typeValue
+                    };
+                });
+                debug.innerHTML = `読込成功: ${deliveryData.length}件<br>データ例: ${deliveryData[0].full} → ${deliveryData[0].type}`;
+            } catch (e) {
+                debug.innerText = `エラー: ${e.message}`;
+            }
+        }
+
+        // 配送判定（スペース区切りAND検索対応）
+        function check() {
             const input = document.getElementById('addressInput').value.trim();
             const resultDiv = document.getElementById('result');
-            const debug = document.getElementById('debug-info');
             if (!input) return;
 
-            // 【新機能】入力された文字をスペース（全角・半角両方）で分割して配列にする
+            // 全角・半角スペースでキーワードを分割
             const keywords = input.split(/[\s　]+/).filter(k => k !== "");
 
+            // 検索実行
             const found = deliveryData.find(item => {
                 if (!item.full) return false;
-                
-                // すべてのキーワードがCSVの住所（県+市+区）に含まれているかチェック
-                // 例：「北海道　清田」→「北海道札幌市清田区」の中に両方あればヒット
-                return keywords.every(keyword => item.full.includes(keyword));
-            });
-
-            if (!found) {
-                resultDiv.innerHTML = "該当データなし";
-                resultDiv.className = "";
-                return;
-            }
-
-            let message = "";
-            let className = "";
-
-            if (found.type === "1") {
-                message = "✨ 明日の午前中に届きます";
-                className = "type1";
-            } else if (found.type === "2") {
-                message = "🚚 明日の午後以降に届きます";
-                className = "type2";
-            } else if (found.type === "3") {
-                message = "⏳ 翌々日の到着予定です";
-                className = "type3";
-            } else {
-                message = `区分不明 (${found.type})`;
-                className = "";
-            }
-
-            resultDiv.innerHTML = message + `<br><small style="font-weight:normal;">(判定エリア: ${found.full})</small>`;
-            resultDiv.className = className;
-        }
+                // 入

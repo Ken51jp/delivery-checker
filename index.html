@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>物流配送判定システム（安定版）</title>
+    <title>物流配送判定システム</title>
     <style>
         body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
@@ -15,21 +15,21 @@
         .type1 { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
         .type2 { background-color: #e3f2fd; color: #007bff; border: 1px solid #007bff; }
         .type3 { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
-        #debug-info { font-size: 10px; color: #999; margin-top: 20px; text-align: left; }
+        #debug-info { font-size: 10px; color: #999; margin-top: 20px; }
     </style>
 </head>
 <body>
 
     <div id="login-screen" class="card">
         <h2>🔒 認証</h2>
-        <input type="password" id="passInput" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter') login()">
+        <input type="password" id="passInput" placeholder="パスワードを入力">
         <button onclick="login()">ログイン</button>
     </div>
 
     <div id="app-screen" class="card">
         <h2>🚚 配送判定</h2>
-        <p>お届け先を入力（例：札幌市中央区）</p>
-        <input type="text" id="addressInput" placeholder="住所を入力してください" onkeydown="if(event.key==='Enter') check()">
+        <p>お届け先を入力してください</p>
+        <input type="text" id="addressInput" placeholder="例：北海道札幌市中央区">
         <button onclick="check()" style="background-color: #28a745;">判定する</button>
         <div id="result"></div>
         <div id="debug-info"></div>
@@ -45,33 +45,30 @@
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app-screen').style.display = 'block';
                 loadCSV();
-            } else {
-                alert("パスワードが違います。");
-            }
+            } else { alert("パスワードが違います。"); }
         }
 
         async function loadCSV() {
             const debug = document.getElementById('debug-info');
             try {
                 const response = await fetch('data.csv');
-                if (!response.ok) throw new Error("CSVファイルが見つかりません");
-                
                 const text = await response.text();
+                // 改行コードの揺れを吸収して1行ずつ処理
                 const lines = text.split(/\r?\n/);
                 
                 deliveryData = lines.filter(line => line.trim() !== "").map(line => {
-                    // コンマで区切り、各項目をきれいにする
+                    // カンマで区切り、前後の空白を除去
                     const cols = line.split(',').map(c => c.trim());
                     return {
                         pref: cols[0] || "",
                         city: cols[1] || "",
                         ward: cols[2] || "",
-                        type: cols[cols.length - 1] // 最後の列を判定数値とする
+                        type: cols[3] || cols[cols.length - 1] // 4列目、または最後の列
                     };
                 });
                 debug.innerText = `システム稼働中：${deliveryData.length} 件の配送データを読込済`;
             } catch (e) {
-                debug.innerText = `エラー：${e.message}。data.csvがGitHubに正しくあるか確認してください。`;
+                debug.innerText = `読み込みエラー: ${e.message}`;
             }
         }
 
@@ -80,14 +77,19 @@
             const resultDiv = document.getElementById('result');
             if (!input) return;
 
-            // 判定ロジック：入力された住所の中に、CSVの「県名+市区」が含まれているか
+            // 検索ロジックの改善：
+            // CSV側の住所（県+市+区）を作成し、入力された文字がそれを「含んでいるか」で判定
             const found = deliveryData.find(item => {
-                const fullAddressInCSV = (item.pref + item.city + item.ward);
-                // CSVの住所が入力値に含まれているか、逆に入力値がCSVの住所を含んでいるか
-                return input.includes(fullAddressInCSV) || fullAddressInCSV.includes(input);
+                // CSV内の情報を結合（例：「北海道札幌市中央区」や「鹿児島県鹿児島市」）
+                const combined = item.pref + item.city + item.ward;
+                if (!combined) return false;
+                
+                // 入力された住所がCSVの組み合わせを含んでいるかチェック
+                // （例：入力「北海道札幌市中央区大通」に対し、CSV「北海道札幌市中央区」がヒット）
+                return input.includes(combined);
             });
 
-            if (!found || !found.type) {
+            if (!found) {
                 resultDiv.innerHTML = "該当データなし。都道府県から入力してください。";
                 resultDiv.className = "";
                 return;
@@ -106,9 +108,8 @@
                 message = "⏳ 翌々日の到着予定です";
                 className = "type3";
             } else {
-                resultDiv.innerHTML = "区分不明(" + found.type + ")";
-                resultDiv.className = "";
-                return;
+                message = "配送区分不明: " + found.type;
+                className = "";
             }
 
             resultDiv.innerHTML = message;

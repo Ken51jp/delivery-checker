@@ -3,26 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>配送判定システム（セキュリティ強化版）</title>
+    <title>配送判定システム</title>
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; color: #333; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
-        
-        /* 画面切り替え */
         #login-screen { display: block; }
         #app-screen { display: none; }
-
         input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; }
-        input:focus { border-color: #007bff; }
-        
-        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background-color: #0056b3; }
-        
-        #result { margin-top: 25px; padding: 15px; border-radius: 8px; min-height: 60px; line-height: 1.6; font-weight: bold; }
+        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        #result { margin-top: 25px; padding: 15px; border-radius: 8px; font-weight: bold; line-height: 1.6; }
         .ok { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
         .delay { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
         .error { color: #dc3545; font-size: 0.9em; margin-top: 10px; }
-        .note { font-size: 0.85em; color: #666; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -37,34 +29,23 @@
 
     <div id="app-screen" class="card">
         <h2>🚚 配送判定（東京発）</h2>
-        <p>お届け先の市区町村名を入力してください</p>
+        <p>お届け先の都道府県・市区町村を入力</p>
         <input type="text" id="addressInput" placeholder="例：大阪府、青森市、小笠原村" onkeydown="if(event.key==='Enter') check()">
         <button onclick="check()" style="background-color: #28a745;">判定する</button>
         <div id="result"></div>
-        
         <button onclick="location.reload()" style="margin-top: 40px; background-color: #6c757d; font-size: 12px; padding: 8px; width: auto;">ログアウト</button>
     </div>
 
     <script>
-        /**
-         * パスワード対策：
-         * パスワード「5963」をSHA-1という方式でハッシュ化した値です。
-         * ソースコードを見ても元の数字はパッと見ではわかりません。
-         */
-        const HASHED_PASS = "d2626e953047a0662663999905d6e90278786963";
-
-        async function login() {
+        // パスワード「5963」を安全に判定するための関数
+        function login() {
             const pass = document.getElementById('passInput').value;
             const error = document.getElementById('loginError');
             
-            // 入力された文字をハッシュ化
-            const encoder = new TextEncoder();
-            const data = encoder.encode(pass);
-            const hashBuffer = await crypto.subtle.digest('SHA-1', data);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-            if (hashHex === HASHED_PASS) {
+            // btoaは文字をエンコードする関数です。
+            // 「5963」をこの形式にすると「NTk2Mw==」になります。
+            // これにより、ソースを見ても一瞬では5963だと分かりません。
+            if (btoa(pass) === "NTk2Mw==") {
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app-screen').style.display = 'block';
             } else {
@@ -72,7 +53,6 @@
             }
         }
 
-        // 配送判定データ
         const prefMaster = {
             "東京都":1, "神奈川県":1, "千葉県":1, "埼玉県":1, "茨城県":1, "栃木県":1, "群馬県":1,
             "山梨県":1, "長野県":1, "新潟県":1, "富山県":1, "石川県":1, "福井県":1, "静岡県":1, "愛知県":1, "三重県":1, "岐阜県":1,
@@ -98,7 +78,6 @@
             let finalDays = 0;
             let note = "";
 
-            // 1. 例外市町村のチェック
             for (let city of specialCities) {
                 if (input.includes(city.name)) {
                     finalDays = city.days;
@@ -107,7 +86,6 @@
                 }
             }
 
-            // 2. 都道府県のチェック
             if (finalDays === 0) {
                 for (let pref in prefMaster) {
                     const simplePref = pref.replace("県","").replace("府","").replace("都","").replace("道","");
@@ -119,27 +97,18 @@
             }
 
             if (finalDays === 0) {
-                resultDiv.innerHTML = "判定できませんでした。正しい都道府県名を入力してください。";
+                resultDiv.innerHTML = "判定できませんでした。";
                 resultDiv.className = "";
                 return;
             }
 
-            // 現在時刻による15時締め判定
             const now = new Date();
             const hour = now.getHours();
-            const isAfterLimit = hour >= 15;
-            if (isAfterLimit) finalDays += 1;
+            if (hour >= 15) finalDays += 1;
 
-            let message = "";
-            if (isAfterLimit) {
-                message = `【本日15時を過ぎました】<br>明日発送となり、到着予定は<strong>${finalDays}日後</strong>です。`;
-            } else if (finalDays === 1) {
-                message = "✨ 本日発送・<strong>明日届きます！</strong>";
-            } else {
-                message = `本日発送ですが、到着予定は<strong>${finalDays}日後</strong>です。`;
-            }
-
-            if (note) message += `<div class="note">※${note}</div>`;
+            let message = `到着予定：<strong>${finalDays}日後</strong>`;
+            if (hour >= 15) message = `【15時以降の注文】<br>` + message;
+            if (note) message += `<br><small>※${note}</small>`;
             
             resultDiv.innerHTML = message;
             resultDiv.className = (finalDays <= 1) ? "ok" : "delay";

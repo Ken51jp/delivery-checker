@@ -8,35 +8,42 @@
         body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; color: #333; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
         
-        /* 開発用：ログイン画面は非表示、アプリ画面を表示 */
-        #login-screen { display: none; }
-        #app-screen { display: block; }
-
         input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; }
         input:focus { border-color: #007bff; }
         
         button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:hover { background-color: #0056b3; }
         
-        #result { margin-top: 25px; padding: 15px; border-radius: 8px; min-height: 60px; display: flex; align-items: center; justify-content: center; flex-direction: column; font-weight: bold; }
+        #result { margin-top: 25px; min-height: 60px; text-align: left; }
         
-        .type1 { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
-        .type2 { background-color: #e3f2fd; color: #007bff; border: 1px solid #007bff; }
-        .type3 { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
+        /* 候補リストのスタイル */
+        .candidate-item { background: #fff; border: 1px solid #ddd; padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .candidate-item:hover { background: #f8f9fa; border-color: #007bff; }
+        .candidate-name { font-weight: bold; display: block; margin-bottom: 5px; }
+
+        /* 判定結果のラベル */
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
+        .bg-type1 { background-color: #28a745; } /* 翌日午前 */
+        .bg-type2 { background-color: #007bff; } /* 翌日午後 */
+        .bg-type3 { background-color: #dc3545; } /* 翌々日 */
         
+        .result-detail { padding: 15px; border-radius: 10px; text-align: center; font-weight: bold; margin-bottom: 10px; }
+        .type1-box { background-color: #e6ffed; border: 1px solid #28a745; color: #28a745; }
+        .type2-box { background-color: #e3f2fd; border: 1px solid #007bff; color: #007bff; }
+        .type3-box { background-color: #fff5f5; border: 1px solid #dc3545; color: #dc3545; }
+
         #debug-info { font-size: 11px; color: #666; margin-top: 20px; background: #eee; padding: 10px; border-radius: 5px; text-align: left; }
-        .note { font-weight: normal; font-size: 0.85em; margin-top: 5px; color: #555; }
         .dev-badge { background: #ffc107; color: #000; font-size: 10px; padding: 2px 8px; border-radius: 10px; margin-bottom: 10px; display: inline-block; }
     </style>
 </head>
 <body>
 
     <div id="app-screen" class="card">
-        <span class="dev-badge">開発モード：パスワードなし</span>
+        <span class="dev-badge">開発モード：複数候補表示対応</span>
         <h2>🚚 配送判定</h2>
-        <p>お届け先を入力してください</p>
-        <input type="text" id="addressInput" placeholder="例：北海道 清田" onkeydown="if(event.key==='Enter') check()">
-        <button onclick="check()" style="background-color: #28a745;">判定する</button>
+        <p>地名を入力してください</p>
+        <input type="text" id="addressInput" placeholder="例：栄、清田、札幌" onkeydown="if(event.key==='Enter') check()">
+        <button onclick="check()" style="background-color: #28a745;">検索する</button>
         
         <div id="result"></div>
         <div id="debug-info">データを読み込み中...</div>
@@ -45,43 +52,35 @@
     <script>
         let deliveryData = [];
 
-        // 開発用：ページを開いた瞬間にCSV読み込みを開始する
         window.onload = function() {
             loadCSV();
         };
 
-        // CSV読み込み（Shift-JIS対応）
         async function loadCSV() {
             const debug = document.getElementById('debug-info');
             try {
                 const response = await fetch('data.csv');
-                if (!response.ok) throw new Error("data.csvが見つかりません");
-                
                 const arrayBuffer = await response.arrayBuffer();
                 const decoder = new TextDecoder('shift-jis');
                 const text = decoder.decode(arrayBuffer);
-                
-                const cleanText = text.replace(/^\uFEFF/, "");
-                const lines = cleanText.split(/\r?\n/);
+                const lines = text.split(/\r?\n/);
                 
                 deliveryData = lines.filter(line => line.trim() !== "").map(line => {
                     const cols = line.split(',').map(c => c.trim());
-                    const typeValue = cols.slice(-1)[0]; 
                     return {
                         pref: cols[0] || "",
                         city: cols[1] || "",
                         ward: cols[2] || "",
                         full: (cols[0] + cols[1] + cols[2]).replace(/undefined/g, ""),
-                        type: typeValue
+                        type: cols.slice(-1)[0]
                     };
                 });
-                debug.innerHTML = `読込成功: ${deliveryData.length}件<br>データ例: ${deliveryData[0].full} → ${deliveryData[0].type}`;
+                debug.innerHTML = `読込成功: ${deliveryData.length}件`;
             } catch (e) {
                 debug.innerText = `エラー: ${e.message}`;
             }
         }
 
-        // 配送判定（スペース区切りAND検索）
         function check() {
             const input = document.getElementById('addressInput').value.trim();
             const resultDiv = document.getElementById('result');
@@ -89,37 +88,66 @@
 
             const keywords = input.split(/[\s　]+/).filter(k => k !== "");
 
-            const found = deliveryData.find(item => {
+            // 【変更点】findではなくfilterを使い、一致するものをすべて取得
+            const matches = deliveryData.filter(item => {
                 if (!item.full) return false;
                 return keywords.every(keyword => item.full.includes(keyword));
             });
 
-            if (!found) {
-                resultDiv.innerHTML = "該当データなし";
-                resultDiv.className = "";
+            if (matches.length === 0) {
+                resultDiv.innerHTML = "<p style='text-align:center;'>該当データなし</p>";
                 return;
             }
 
-            let message = "";
-            let className = "";
-
-            if (found.type === "1") {
-                message = "✨ 明日の午前中に届きます";
-                className = "type1";
-            } else if (found.type === "2") {
-                message = "🚚 明日の午後以降に届きます";
-                className = "type2";
-            } else if (found.type === "3") {
-                message = "⏳ 翌々日の到着予定です";
-                className = "type3";
+            // 1件だけなら即座に結果表示、複数ならリスト表示
+            if (matches.length === 1) {
+                showDetail(matches[0]);
             } else {
-                message = `区分不明 (${found.type})`;
-                className = "";
+                let html = `<p style="font-size:13px; color:#666;">${matches.length}件見つかりました。選択してください：</p>`;
+                matches.forEach((item, index) => {
+                    const typeLabel = getTypeInfo(item.type).label;
+                    const badgeClass = "bg-type" + item.type;
+                    html += `
+                        <div class="candidate-item" onclick='showSelected(${JSON.stringify(item)})'>
+                            <span class="candidate-name">${item.full}</span>
+                            <span class="badge ${badgeClass}">${typeLabel}</span>
+                        </div>`;
+                });
+                resultDiv.innerHTML = html;
             }
-
-            resultDiv.innerHTML = message + `<div class="note">(判定エリア: ${found.full})</div>`;
-            resultDiv.className = className;
         }
+
+        // リストから選ばれた時の処理
+        window.showSelected = function(item) {
+            showDetail(item);
+        };
+
+        function showDetail(item) {
+            const resultDiv = document.getElementById('result');
+            const info = getTypeInfo(item.type);
+            resultDiv.innerHTML = `
+                <div class="result-detail ${info.boxClass}">
+                    <div style="font-size:14px; margin-bottom:5px; color:#555;">${item.full}</div>
+                    <div style="font-size:18px;">${info.message}</div>
+                </div>
+                <button onclick="resetSearch()" style="background-color:#6c757d; font-size:12px; padding:5px; margin-top:10px;">再検索</button>
+            `;
+        }
+
+        function getTypeInfo(type) {
+            switch (type) {
+                case "1": return { label: "翌日午前", message: "✨ 明日の午前中", boxClass: "type1-box" };
+                case "2": return { label: "翌日午後", message: "🚚 明日の午後以降", boxClass: "type2-box" };
+                case "3": return { label: "翌々日", message: "⏳ 翌々日の到着予定", boxClass: "type3-box" };
+                default: return { label: "不明", message: "区分不明", boxClass: "" };
+            }
+        }
+
+        window.resetSearch = function() {
+            document.getElementById('addressInput').value = "";
+            document.getElementById('result').innerHTML = "";
+            document.getElementById('addressInput').focus();
+        };
     </script>
 </body>
 </html>

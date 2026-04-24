@@ -3,75 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>東京発・明日届くかなチェック</title>
+    <title>配送判定アプリ（入力版）</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f7f6; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-        select, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 16px; }
-        button { background-color: #007bff; color: white; border: none; cursor: pointer; }
-        #result { margin-top: 20px; font-weight: bold; font-size: 1.2em; min-height: 50px; }
-        .fast { color: #28a745; } /* 明日届く */
-        .slow { color: #dc3545; } /* 明後日以降 */
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; color: #333; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
+        h2 { color: #007bff; margin-bottom: 20px; }
+        input { width: 100%; padding: 12px; box-sizing: border-box; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; margin-bottom: 15px; outline: none; }
+        input:focus { border-color: #007bff; }
+        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background-color: #0056b3; }
+        #result { margin-top: 25px; padding: 15px; border-radius: 8px; min-height: 60px; line-height: 1.6; }
+        .fast { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
+        .slow { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h2>🚚 配送判定（東京発）</h2>
-        <p>お届け先の都道府県を選んでください</p>
-        <select id="pref">
-            <option value="">-- 都道府県を選択 --</option>
-            <optgroup label="翌日届く可能性が高い">
-                <option value="1">茨城県, 栃木県, 群馬県, 埼玉県, 千葉県, 東京都, 神奈川県</option>
-                <option value="1">山梨県, 長野県, 新潟県, 富山県, 石川県, 福井県, 静岡県, 愛知県, 三重県, 岐阜県</option>
-                <option value="1">大阪府, 京都府, 滋賀県, 奈良県, 兵庫県, 和歌山県</option>
-                <option value="1">宮城県, 山形県, 福島県</option>
-            </optgroup>
-            <optgroup label="通常、中1日（翌々日）">
-                <option value="2">青森県, 岩手県, 秋田県</option>
-                <option value="2">鳥取県, 島根県, 岡山県, 広島県, 山口県</option>
-                <option value="2">徳島県, 香川県, 愛媛県, 高知県</option>
-                <option value="2">福岡県, 佐賀県, 長崎県, 熊本県, 大分県, 宮崎県, 鹿児島県</option>
-                <option value="2">北海道</option>
-            </optgroup>
-            <optgroup label="3日以上">
-                <option value="3">沖縄県・離島</option>
-            </optgroup>
-        </select>
+        <h2>🚚 東京発・配送判定</h2>
+        <p>お届け先の都道府県を入力してください</p>
+        <input type="text" id="prefInput" placeholder="例：大阪府、青森、北海道" onkeydown="if(event.key==='Enter') check()">
         <button onclick="check()">判定する</button>
         <div id="result"></div>
     </div>
 
     <script>
+        const deliveryMaster = {
+            // 翌日エリア
+            "茨城県":1, "栃木県":1, "群馬県":1, "埼玉県":1, "千葉県":1, "東京都":1, "神奈川県":1,
+            "山梨県":1, "長野県":1, "新潟県":1, "富山県":1, "石川県":1, "福井県":1, "静岡県":1, "愛知県":1, "三重県":1, "岐阜県":1,
+            "大阪府":1, "京都府":1, "滋賀県":1, "奈良県":1, "兵庫県":1, "和歌山県":1,
+            "宮城県":1, "山形県":1, "福島県":1,
+            // 翌々日エリア
+            "青森県":2, "岩手県":2, "秋田県":2,
+            "鳥取県":2, "島根県":2, "岡山県":2, "広島県":2, "山口県":2,
+            "徳島県":2, "香川県":2, "愛媛県":2, "高知県":2,
+            "福岡県":2, "佐賀県":2, "長崎県":2, "熊本県":2, "大分県":2, "宮崎県":2, "鹿児島県":2,
+            "北海道":2,
+            // 3日以上
+            "沖縄県":3
+        };
+
         function check() {
-            const days = document.getElementById('pref').value;
+            let input = document.getElementById('prefInput').value.trim();
             const resultDiv = document.getElementById('result');
+            
+            if (!input) {
+                resultDiv.innerHTML = "都道府県を入力してください。";
+                resultDiv.className = "";
+                return;
+            }
+
+            // 「県」「府」「都」がなくても判定できるように補正
+            if (!input.includes("県") && !input.includes("府") && !input.includes("都") && !input.includes("道")) {
+                if (input !== "青森" && input !== "岩手" && input !== "秋田" && input !== "山形" && input !== "福島" && input !== "茨城" && input !== "栃木" && input !== "群馬" && input !== "埼玉" && input !== "千葉" && input !== "神奈川" && input !== "山梨" && input !== "長野" && input !== "新潟" && input !== "富山" && input !== "石川" && input !== "福井" && input !== "静岡" && input !== "愛知" && input !== "三重" && input !== "岐阜" && input !== "滋賀" && input !== "奈良" && input !== "和歌山" && input !== "鳥取" && input !== "島根" && input !== "岡山" && input !== "広島" && input !== "山口" && input !== "徳島" && input !== "香川" && input !== "愛媛" && input !== "高知" && input !== "福岡" && input !== "佐賀" && input !== "長崎" && input !== "熊本" && input !== "大分" && input !== "宮崎" && input !== "鹿児島") {
+                    // 特殊な「都」「府」「道」以外は「県」を足してみる
+                    if (input === "東京") input += "特"; // 下で処理
+                    else if (input === "大阪" || input === "京都") input += "府";
+                    else if (input === "兵庫") input += "県";
+                    else input += "県";
+                }
+                if (input === "東京特") input = "東京都";
+            }
+
+            // マスターデータから日数を取得
+            let days = deliveryMaster[input];
+            
+            // 九州や四国などの「県」なし入力への対応（簡易版）
+            if (!days) {
+                for (let key in deliveryMaster) {
+                    if (key.startsWith(input)) {
+                        days = deliveryMaster[key];
+                        break;
+                    }
+                }
+            }
+
+            if (!days) {
+                resultDiv.innerHTML = "正しい都道府県名を入力してください。<br>(例: 大阪府、青森県、北海道)";
+                resultDiv.className = "";
+                return;
+            }
+
             const now = new Date();
             const hour = now.getHours();
             const limit = 15; // 15時締め切り
-
-            if (!days) {
-                resultDiv.innerHTML = "都道府県を選択してください。";
-                return;
-            }
 
             let message = "";
             let className = "";
 
             if (hour >= limit) {
-                // 15時を過ぎている場合、発送は明日になるので+1日
-                const arrival = parseInt(days) + 1;
-                message = `15時を過ぎたため明日発送です。<br>到着予定：${arrival}日後`;
+                const arrival = days + 1;
+                message = `【本日15時を過ぎました】<br>明日発送となり、到着予定は<strong>${arrival}日後</strong>です。`;
                 className = "slow";
             } else {
-                if (days == "1") {
-                    message = "✨ 明日届きます！";
+                if (days === 1) {
+                    message = "✨ 本日発送・<strong>明日届きます！</strong>";
                     className = "fast";
                 } else {
-                    message = `到着予定：${days}日後（明後日以降）`;
+                    message = `本日発送ですが、距離があるため<br>到着予定は<strong>${days}日後</strong>（明後日以降）です。`;
                     className = "slow";
                 }
             }
-            resultDiv.innerHTML = `<span class="${className}">${message}</span>`;
+            resultDiv.innerHTML = message;
+            resultDiv.className = className;
         }
     </script>
 </body>

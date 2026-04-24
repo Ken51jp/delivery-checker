@@ -3,18 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>配送判定システム</title>
+    <title>物流配送判定システム</title>
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; color: #333; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
         #login-screen { display: block; }
         #app-screen { display: none; }
         input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; }
-        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
-        #result { margin-top: 25px; padding: 15px; border-radius: 8px; font-weight: bold; line-height: 1.6; }
-        .ok { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
-        .delay { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
-        .error { color: #dc3545; font-size: 0.9em; margin-top: 10px; }
+        input:focus { border-color: #007bff; }
+        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background-color: #0056b3; }
+        #result { margin-top: 25px; padding: 15px; border-radius: 8px; min-height: 60px; line-height: 1.6; font-weight: bold; }
+        /* 1: 翌日午前 */
+        .type1 { background-color: #e6ffed; color: #28a745; border: 1px solid #28a745; }
+        /* 2: 翌日午後 */
+        .type2 { background-color: #e3f2fd; color: #007bff; border: 1px solid #007bff; }
+        /* 3: 翌々日 */
+        .type3 { background-color: #fff5f5; color: #dc3545; border: 1px solid #dc3545; }
+        .loading { font-size: 0.8em; color: #666; }
     </style>
 </head>
 <body>
@@ -24,94 +30,95 @@
         <p>パスワードを入力してください</p>
         <input type="password" id="passInput" placeholder="パスワードを入力" onkeydown="if(event.key==='Enter') login()">
         <button onclick="login()">ログイン</button>
-        <p id="loginError" class="error"></p>
     </div>
 
     <div id="app-screen" class="card">
-        <h2>🚚 配送判定（東京発）</h2>
-        <p>お届け先の都道府県・市区町村を入力</p>
-        <input type="text" id="addressInput" placeholder="例：大阪府、青森市、小笠原村" onkeydown="if(event.key==='Enter') check()">
+        <h2>🚚 配送判定（全国網羅版）</h2>
+        <p>都道府県、市区町村を入力してください</p>
+        <input type="text" id="addressInput" placeholder="例：大阪府大阪市北区" onkeydown="if(event.key==='Enter') check()">
         <button onclick="check()" style="background-color: #28a745;">判定する</button>
         <div id="result"></div>
+        <p id="loadStatus" class="loading"></p>
         <button onclick="location.reload()" style="margin-top: 40px; background-color: #6c757d; font-size: 12px; padding: 8px; width: auto;">ログアウト</button>
     </div>
 
     <script>
-        // パスワード「5963」を安全に判定するための関数
-        function login() {
+        let deliveryData = [];
+
+        async function login() {
             const pass = document.getElementById('passInput').value;
-            const error = document.getElementById('loginError');
-            
-            // btoaは文字をエンコードする関数です。
-            // 「5963」をこの形式にすると「NTk2Mw==」になります。
-            // これにより、ソースを見ても一瞬では5963だと分かりません。
+            // パスワード 5963 (エンコード済)
             if (btoa(pass) === "NTk2Mw==") {
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app-screen').style.display = 'block';
+                await loadCSV();
             } else {
-                error.innerText = "パスワードが違います。";
+                alert("パスワードが違います。");
             }
         }
 
-        const prefMaster = {
-            "東京都":1, "神奈川県":1, "千葉県":1, "埼玉県":1, "茨城県":1, "栃木県":1, "群馬県":1,
-            "山梨県":1, "長野県":1, "新潟県":1, "富山県":1, "石川県":1, "福井県":1, "静岡県":1, "愛知県":1, "三重県":1, "岐阜県":1,
-            "大阪府":1, "京都府":1, "滋賀県":1, "奈良県":1, "兵庫県":1, "和歌山県":1, "宮城県":1, "山形県":1, "福島県":1,
-            "青森県":2, "岩手県":2, "秋田県":2, "鳥取県":2, "島根県":2, "岡山県":2, "広島県":2, "山口県":2,
-            "徳島県":2, "香川県":2, "愛媛県":2, "高知県":2, "福岡県":2, "佐賀県":2, "長崎県":2, "熊本県":2, "大分県":2, "宮崎県":2, "鹿児島県":2, "北海道":2,
-            "沖縄県":3
-        };
-
-        const specialCities = [
-            { name: "小笠原", days: 6, note: "定期船の便によります" },
-            { name: "伊豆諸島", days: 3, note: "船の運航状況によります" },
-            { name: "奄美", days: 4, note: "中継拠点を通るためお時間がかかります" },
-            { name: "対馬", days: 4, note: "船便のため時間がかかります" },
-            { name: "佐渡", days: 2, note: "新潟港からの船便になります" }
-        ];
+        async function loadCSV() {
+            const status = document.getElementById('loadStatus');
+            status.innerText = "データを読み込み中...";
+            try {
+                const response = await fetch('data.csv');
+                const text = await response.text();
+                const lines = text.split(/\r?\n/);
+                // CSVを解析（空行を除外）
+                deliveryData = lines.filter(line => line.trim() !== "").map(line => {
+                    const [pref, city, ward, type] = line.split(',');
+                    return { pref, city, ward, type: type?.trim() };
+                });
+                status.innerText = "データの読み込みが完了しました。";
+            } catch (e) {
+                status.innerText = "データの読み込みに失敗しました。data.csvが同じ場所にありますか？";
+            }
+        }
 
         function check() {
             const input = document.getElementById('addressInput').value.trim();
             const resultDiv = document.getElementById('result');
+            
             if (!input) return;
 
-            let finalDays = 0;
-            let note = "";
+            // 入力された住所が含まれる行を探す（都道府県、市区、町村の順に絞り込み）
+            const found = deliveryData.find(item => {
+                const hasPref = input.includes(item.pref);
+                const hasCity = !item.city || input.includes(item.city);
+                const hasWard = !item.ward || input.includes(item.ward);
+                return hasPref && hasCity && hasWard;
+            });
 
-            for (let city of specialCities) {
-                if (input.includes(city.name)) {
-                    finalDays = city.days;
-                    note = city.note;
-                    break;
-                }
-            }
-
-            if (finalDays === 0) {
-                for (let pref in prefMaster) {
-                    const simplePref = pref.replace("県","").replace("府","").replace("都","").replace("道","");
-                    if (input.includes(simplePref)) {
-                        finalDays = prefMaster[pref];
-                        break;
-                    }
-                }
-            }
-
-            if (finalDays === 0) {
-                resultDiv.innerHTML = "判定できませんでした。";
+            if (!found || !found.type) {
+                resultDiv.innerHTML = "該当する配送データが見つかりませんでした。<br>都道府県から正確に入力してください。";
                 resultDiv.className = "";
                 return;
             }
 
-            const now = new Date();
-            const hour = now.getHours();
-            if (hour >= 15) finalDays += 1;
+            let message = "";
+            let className = "";
 
-            let message = `到着予定：<strong>${finalDays}日後</strong>`;
-            if (hour >= 15) message = `【15時以降の注文】<br>` + message;
-            if (note) message += `<br><small>※${note}</small>`;
-            
+            // CSVの数値(1,2,3)に基づいてメッセージを固定
+            switch (found.type) {
+                case "1":
+                    message = "✨ 明日の午前中に届きます";
+                    className = "type1";
+                    break;
+                case "2":
+                    message = "🚚 明日の午後以降に届きます";
+                    className = "type2";
+                    break;
+                case "3":
+                    message = "⏳ 翌々日の到着予定です";
+                    className = "type3";
+                    break;
+                default:
+                    message = "配送区分が不明です。";
+                    className = "";
+            }
+
             resultDiv.innerHTML = message;
-            resultDiv.className = (finalDays <= 1) ? "ok" : "delay";
+            resultDiv.className = className;
         }
     </script>
 </body>

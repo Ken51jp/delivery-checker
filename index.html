@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>物流配送判定システム</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('service-worker.js');
+      }
+    </script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <style>
         body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; padding: 20px; background-color: #f0f2f5; color: #333; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
@@ -11,16 +21,23 @@
         input:focus { border-color: #28a745; border-width: 2px; }
         button { width: 100%; padding: 12px; background-color: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
         #result { margin-top: 25px; min-height: 60px; text-align: left; }
+        
+        /* 候補リスト */
         .candidate-item { background: #fff; border: 1px solid #ddd; padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; }
         .candidate-name { font-weight: bold; display: block; margin-bottom: 5px; }
+        
+        /* 判定ラベルのバッジ色分け */
         .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
-        .bg-type1 { background-color: #28a745; }
-        .bg-type2 { background-color: #007bff; }
-        .bg-type3 { background-color: #dc3545; }
-        .result-detail { padding: 15px; border-radius: 10px; text-align: center; font-weight: bold; margin-bottom: 10px; }
-        .type1-box { background-color: #e6ffed; border: 1px solid #28a745; color: #28a745; }
-        .type2-box { background-color: #e3f2fd; border: 1px solid #007bff; color: #007bff; }
-        .type3-box { background-color: #fff5f5; border: 1px solid #dc3545; color: #dc3545; }
+        .bg-type1, .bg-type2 { background-color: #28a745; } /* 午前系は緑 */
+        .bg-type3, .bg-type5 { background-color: #007bff; } /* 午後系は青 */
+        .bg-type4 { background-color: #dc3545; }             /* 翌々日は赤 */
+        
+        /* 詳細ボックスの色分け */
+        .result-detail { padding: 15px; border-radius: 10px; text-align: center; font-weight: bold; margin-bottom: 10px; border-width: 1px; border-style: solid; }
+        .type-green { background-color: #e6ffed; border-color: #28a745; color: #28a745; }
+        .type-blue { background-color: #e3f2fd; border-color: #007bff; color: #007bff; }
+        .type-red { background-color: #fff5f5; border-color: #dc3545; color: #dc3545; }
+
         #debug-info { font-size: 11px; color: #666; margin-top: 20px; background: #eee; padding: 10px; border-radius: 5px; text-align: left; }
     </style>
 </head>
@@ -54,8 +71,9 @@
                 deliveryData = lines.filter(line => line.trim() !== "").map(line => {
                     const cols = line.split(',').map(c => c.trim());
                     let typeValue = "";
+                    // 1〜5のいずれかの数字を後ろから探す
                     for (let i = cols.length - 1; i >= 0; i--) {
-                        if (cols[i] === "1" || cols[i] === "2" || cols[i] === "3") {
+                        if (["1", "2", "3", "4", "5"].includes(cols[i])) {
                             typeValue = cols[i];
                             break;
                         }
@@ -75,14 +93,11 @@
             const resultDiv = document.getElementById('result');
             const input = inputElement.value.trim();
 
-            // --- 【スマホキーボード強制閉じ強化策】 ---
-            inputElement.blur(); // フォーカスを外す
-            // 1. inputを一瞬だけ操作不能にする
+            // キーボード強制閉じ
+            inputElement.blur();
             inputElement.disabled = true;
             setTimeout(() => { inputElement.disabled = false; }, 100);
-            // 2. 画面の別の要素（body）をフォーカスしてキーボードを追い出す
             document.body.focus();
-            // ---------------------------------------
 
             if (!input || deliveryData.length === 0) return;
 
@@ -126,15 +141,17 @@
                 </div>
                 <button onclick="resetSearch()" style="background-color:#6c757d; font-size:12px; padding:5px; margin-top:10px;">再検索</button>
             `;
-            // 詳細表示時にも念のためキーボードを追い出す
             document.activeElement.blur();
         }
 
+        // 1〜5の定義に基づいてメッセージを返す
         function getTypeInfo(type) {
             switch (type) {
-                case "1": return { label: "翌日午前", message: "✨ 明日の午前中", boxClass: "type1-box" };
-                case "2": return { label: "翌日午後", message: "🚚 明日の午後以降", boxClass: "type2-box" };
-                case "3": return { label: "翌々日", message: "⏳ 翌々日の到着予定", boxClass: "type3-box" };
+                case "1": return { label: "翌日午前", message: "✨ 明日の午前中", boxClass: "type-green" };
+                case "2": return { label: "翌日午前*", message: "✨ 明日の午前中<br><small>(一部地域は除く)</small>", boxClass: "type-green" };
+                case "3": return { label: "翌日午後", message: "🚚 明日の午後以降", boxClass: "type-blue" };
+                case "4": return { label: "翌々日以降", message: "⏳ 翌々日以降の到着", boxClass: "type-red" };
+                case "5": return { label: "翌日午後*", message: "🚚 明日の午後以降<br><small>(一部地域は除く)</small>", boxClass: "type-blue" };
                 default: return { label: "不明", message: "区分不明 (" + type + ")", boxClass: "" };
             }
         }
